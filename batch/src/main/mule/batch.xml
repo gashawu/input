@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<db:config name="Database_Config1" doc:name="Database Config" doc:id="055389d2-dc0c-4787-8cec-77a59d4e6c69" >
+		<db:oracle-connection host="localhost" user="system" password="Gebuta123" />
+	</db:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="beefa094-478a-4fd2-a1fb-31fed385d4a7" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="batchFlow" doc:id="b37aa9ed-82d5-442d-9505-5b9be1c581d7" >
+		<http:listener doc:name="Listener" doc:id="97eeab4d-e9b1-4927-acd7-9107cc0e167f" config-ref="HTTP_Listener_config" path="cc"/>
+		<db:select doc:name="Fetch_data" doc:id="68954591-db8e-456f-892f-90c914cebfaf" config-ref="Database_Config1">
+			<db:sql >select * from american6</db:sql>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="18eef325-fdec-4b36-9382-1a2899466088" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/jsontype String = ???
+
+---
+payload map ( payload01 , indexOfPayload01 ) -> {
+	airline: payload01.AIRLINENAME default "",
+	flightCode: payload01.CODE default "",
+	fromAirportCode: payload01.FROMAIRPORT default "",
+	toAirportCode: payload01.TOAIRPORT default "",
+	departureDate: payload01.DEPARTUREDATE as String default "",
+	emptySeats: payload01.EMPTYSEATS default 0,
+	totalSeats: payload01.TOTALSEAT default 0,
+	price: payload01.PRICE default 0,
+	planeType: payload01.PLANETYPE default ""
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<batch:job jobName="batchBatch_Job" doc:id="761cf003-352f-4a9c-9225-b5b9975244c2" >
+			<batch:process-records >
+				<batch:step name="Batch_Step" doc:id="a34e0af5-7dbe-4352-b0c7-4ffd9d5e5b9d" >
+					<db:select doc:name="Select" doc:id="c91aa7d8-570e-4c1d-8776-cba6ce697b5c" config-ref="Database_Config1" targetValue='#[(sizeOf(payload as Array) &gt; 0)]' target="exists">
+						<reconnect />
+						<db:sql > select * from american6 where PRICE=  :PRICE</db:sql>
+						<db:input-parameters ><![CDATA[#[{'PRICE':payload.PRICE}]]]></db:input-parameters>
+					</db:select>
+					<logger level="INFO" doc:name="Logger" doc:id="2ce9f74c-78b9-4200-9c8d-2fddc62614a5" message="#[payload]"/>
+				</batch:step>
+				<batch:step name="Batch_Step1" doc:id="581f9268-26de-4a3c-a8ec-ed5b3a8f5f5f" acceptExpression="#[not vars.exists]">
+					<db:insert doc:name="Insert" doc:id="629ec0e1-4545-42db-ae6d-1dad417323c6" config-ref="Database_Config1">
+						<db:sql>insert into american1(CODE,AIRLINENAME,DEPARTUREDATE,PLANETYPE,PRICE,FROMAIRPORT, EMPTYSEATS,  TOAIRPORT,TOTALSEAT) values (:AIRLINENAME,:CODE,:DEPARTUREDATE,:PLANETYPE,:PRICE,:FROMAIRPORT,: EMPTYSEATS,
+: TOAIRPORT,:TOTALSEAT )</db:sql>
+						<db:input-parameters><![CDATA[#[{
+	"AIRLINENAME": payload.AIRLINENAME,"CODE": payload.CODE,"DEPARTUREDATE": payload.DEPARTUREDATE,
+	"PLANETYPE": payload.PLANETYPE,"PRICE": payload.PRICE,"FROMAIRPORT": payload.FROMAIRPORT,
+	" EMPTYSEATS": payload.EMPTYSEATS," TOAIRPORT": payload.TOAIRPORT,"TOTALSEAT": payload.TOTALSEAT
+}]]]></db:input-parameters>
+					</db:insert>
+					<logger level="INFO" doc:name="Logger" doc:id="3440900b-d9c8-41dd-be44-42ed9cb0b367" message="#[payload]"/>
+				</batch:step>
+			</batch:process-records>
+		</batch:job>
+	</flow>
+</mule>
